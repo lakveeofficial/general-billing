@@ -15,6 +15,20 @@ const nextConfig = {
     // !! WARN !!
     ignoreBuildErrors: true,
   },
+  webpack: (config, { isServer, dev }) => {
+    // Run ensure-seed script when starting the production server
+    if (isServer && !dev) {
+      const originalEntry = config.entry;
+      config.entry = async () => {
+        const entries = await originalEntry();
+        if (entries['pages/_app']) {
+          entries['pages/_app'].unshift('./scripts/ensure-seed.ts');
+        }
+        return entries;
+      };
+    }
+    return config;
+  },
 };
 
 module.exports = nextConfig;
