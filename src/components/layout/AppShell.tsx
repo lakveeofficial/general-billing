@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { cn } from "@/lib/cn";
 import { FiHome, FiBox, FiUsers, FiFileText, FiSettings, FiMenu, FiX } from "react-icons/fi";
 import { FaInstagram, FaYoutube, FaGlobe } from "react-icons/fa";
-import { useEffect, useMemo, useState } from "react";
+import { cn } from "@/lib/cn";
+import Link from "next/link";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: FiHome },
@@ -14,6 +14,53 @@ const nav = [
   { href: "/invoices", label: "Invoices", icon: FiFileText },
   { href: "/settings", label: "Settings", icon: FiSettings },
 ];
+
+function SearchBar({ onSearchToggle }: { onSearchToggle: () => void }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [searchValue, setSearchValue] = useState("");
+
+  // Keep header search in sync with ?search= when on /products
+  useEffect(() => {
+    const isProducts = window.location.pathname?.startsWith("/products");
+    const q = searchParams?.get("search") ?? "";
+    if (isProducts) setSearchValue(q);
+    else setSearchValue("");
+  }, [searchParams]);
+
+  const onSearchSubmit = useMemo(
+    () => (e?: React.FormEvent | React.KeyboardEvent) => {
+      if (e && "preventDefault" in e) e.preventDefault();
+      const q = searchValue.trim();
+      if (q) router.push(`/products?search=${encodeURIComponent(q)}`);
+      else router.push(`/products`);
+      onSearchToggle();
+    },
+    [searchValue, router, onSearchToggle]
+  );
+
+  return (
+    <form onSubmit={onSearchSubmit} className="hidden sm:block relative">
+      <input
+        type="search"
+        value={searchValue}
+        onChange={(e) => setSearchValue(e.target.value)}
+        placeholder="Search products..."
+        className="w-48 sm:w-56 md:w-64 lg:w-72 text-sm sm:text-base rounded-full border-2 border-zinc-700 bg-white/10 hover:bg-white/15 focus:bg-white/20 px-4 sm:px-5 py-2.5 pr-10 placeholder-zinc-400 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+        aria-label="Search products"
+      />
+      <button 
+        type="submit"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
+        aria-label="Search"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </button>
+    </form>
+  );
+}
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -89,25 +136,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           {/* Actions (right) */}
           <div className="flex items-center gap-2 justify-end">
-            <form onSubmit={onSearchSubmit} className="hidden sm:block relative">
-              <input
-                type="search"
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                placeholder="Search products..."
-                className="w-48 sm:w-56 md:w-64 lg:w-72 text-sm sm:text-base rounded-full border-2 border-zinc-700 bg-white/10 hover:bg-white/15 focus:bg-white/20 px-4 sm:px-5 py-2.5 pr-10 placeholder-zinc-400 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
-                aria-label="Search products"
-              />
-              <button 
-                type="submit"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
-                aria-label="Search"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </button>
-            </form>
+            <Suspense fallback={<div className="w-48 h-10 bg-zinc-800/50 rounded-full animate-pulse"></div>}>
+              <SearchBar onSearchToggle={() => setMobileOpen(false)} />
+            </Suspense>
             <div className="hidden md:flex items-center gap-2">
               <div className="h-6 w-0.5 bg-indigo-600/50"></div>
               <div className="text-sm font-medium bg-gradient-to-r from-indigo-400 to-fuchsia-400 bg-clip-text text-transparent">
