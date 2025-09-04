@@ -28,10 +28,14 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     [id]
   );
 
-  // Customers for selection
-  const { rows: customers } = await query<{ id: string; name: string }>(
-    `SELECT id, name FROM customers ORDER BY name ASC LIMIT 200`
-  );
+  // Get the business_id from the invoice
+  const businessId = invoice.business_id;
+
+  // Customers for selection (filtered by business)
+  const { rows: customers } = businessId ? await query<{ id: string; name: string }>(
+    `SELECT id, name FROM customers WHERE business_id = $1 ORDER BY name ASC LIMIT 200`,
+    [businessId]
+  ) : { rows: [] };
 
   // Normalize dates to YYYY-MM-DD for input[type=date]
   const fmtDate = (d: any): string => {

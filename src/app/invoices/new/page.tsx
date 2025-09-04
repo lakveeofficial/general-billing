@@ -17,10 +17,11 @@ export default async function NewInvoicePage() {
     shopId = shops[0]?.id || null;
   }
 
-  // Fetch customers to choose from (optional)
-  const { rows: customers } = await query<{ id: string; name: string }>(
-    `SELECT id, name FROM customers ORDER BY created_at DESC LIMIT 200`
-  );
+  // Fetch customers to choose from (filtered by business)
+  const { rows: customers } = businessId ? await query<{ id: string; name: string }>(
+    `SELECT id, name FROM customers WHERE business_id = $1 ORDER BY name ASC LIMIT 200`,
+    [businessId]
+  ) : { rows: [] };
 
   if (!businessId || !shopId) {
     return (
