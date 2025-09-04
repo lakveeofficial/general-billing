@@ -9,11 +9,28 @@ async function ensureSeed() {
   });
   
   try {
-
-    // Check if any business exists
     const client = await pool.connect();
     try {
-      const result = await client.query('SELECT COUNT(*) FROM business');
+      // First, check if the businesses table exists
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'businesses'
+        );
+      `);
+      
+      const tableExists = tableCheck.rows[0].exists;
+      
+      if (!tableExists) {
+        console.log('Database tables not found. Running initialization script...');
+        // Run the init-db script to create tables
+        execSync('npx tsx scripts/init-db.ts', { stdio: 'inherit' });
+        console.log('Database initialization completed');
+      }
+      
+      // Check if any business exists
+      const result = await client.query('SELECT COUNT(*) FROM businesses');
       const businessCount = parseInt(result.rows[0].count, 10);
       
       if (businessCount === 0) {
