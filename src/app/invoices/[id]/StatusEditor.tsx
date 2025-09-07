@@ -2,19 +2,32 @@
 
 import { useState } from "react";
 import { useToast } from "@/components/ToastProvider";
+import { useRouter } from "next/navigation";
 
 export default function StatusEditor({ id, initial }: { id: string; initial: string }) {
   const [status, setStatus] = useState(initial);
+  const [partialAmount, setPartialAmount] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const toast = useToast();
+  const router = useRouter();
 
   async function save() {
     setSaving(true);
     try {
-      // When marking as PAID, we'll let the server handle setting amount_paid to grand_total
-      const body = status === 'PAID' 
-        ? { status, amount_paid: null } // Let server calculate the full amount
-        : { status };
+      // Build body depending on status
+      let body: any = { status };
+      if (status === 'PAID') {
+        // Let server set amount_paid = grand_total
+        body = {};
+      } else if (status === 'PARTIALLY_PAID') {
+        const val = Number(partialAmount);
+        if (!(val > 0)) {
+          toast.error("Enter a valid partial payment amount (> 0)");
+          setSaving(false);
+          return;
+        }
+        body = { amount_paid: val };
+      }
         
       const res = await fetch(`/api/invoices/${id}`, {
         method: "PATCH",
@@ -27,6 +40,8 @@ export default function StatusEditor({ id, initial }: { id: string; initial: str
         throw new Error(j?.error || `Failed (${res.status})`);
       }
       toast.success("Status updated");
+      // Ensure the latest data is shown immediately
+      router.refresh();
     } catch (e: any) {
       toast.error(e?.message || "Failed to update status");
     } finally {
@@ -43,17 +58,30 @@ export default function StatusEditor({ id, initial }: { id: string; initial: str
       >
         <option value="DRAFT">DRAFT</option>
         <option value="ISSUED">ISSUED</option>
+        <option value="PARTIALLY_PAID">PARTIAL PAID</option>
         <option value="PAID">PAID</option>
         <option value="OVERDUE">OVERDUE</option>
       </select>
+      {status === 'PARTIALLY_PAID' && (
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          value={partialAmount}
+          onChange={(e) => setPartialAmount(e.target.value)}
+          placeholder="Amount paid"
+          className="w-36 rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-zinc-800 dark:border-zinc-700"
+        />
+      )}
       <button
         type="button"
         onClick={save}
         disabled={saving}
-        className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm shadow hover:bg-zinc-50 disabled:opacity-60 dark:bg-zinc-800 dark:border-zinc-700"
+        className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm shadow hover:bg-zinc-50 disabled:opacity-60 dark:bg-zinc-800 dark:border-zinc-700 dark:hover:bg-zinc-700 transition-colors"
       >
         {saving ? "Saving…" : "Save"}
       </button>
     </div>
   );
 }
+

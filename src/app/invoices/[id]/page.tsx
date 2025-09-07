@@ -2,6 +2,8 @@ import { query } from "@/lib/db";
 import Link from "next/link";
 import HeaderActionsClient from "./HeaderActionsClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function InvoiceDetailsPage({ params }: { params: { id: string } }) {
   const id = params.id;
 

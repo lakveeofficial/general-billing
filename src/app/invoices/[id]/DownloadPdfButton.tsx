@@ -41,7 +41,7 @@ export default function DownloadPdfButton({ id, number }: { id: string; number?:
       type="button"
       onClick={download}
       disabled={loading}
-      className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm shadow hover:bg-zinc-50 disabled:opacity-60 dark:bg-zinc-800 dark:border-zinc-700"
+      className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm shadow hover:bg-zinc-50 disabled:opacity-60 dark:bg-zinc-800 dark:border-zinc-700 dark:hover:bg-zinc-700 transition-colors"
     >
       {loading ? "Preparing…" : "Download PDF"}
     </button>

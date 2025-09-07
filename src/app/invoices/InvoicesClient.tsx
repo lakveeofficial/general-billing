@@ -147,12 +147,13 @@ export default function InvoicesClient({ businessId }: { businessId: string }) {
                       className={[
                         "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
                         inv.status === "PAID" && "border-emerald-300 bg-emerald-50 text-emerald-800",
+                        inv.status === "PARTIALLY_PAID" && "border-amber-300 bg-amber-50 text-amber-800",
                         inv.status === "OVERDUE" && "border-red-300 bg-red-50 text-red-700",
                         inv.status === "DRAFT" && "border-zinc-300 bg-zinc-50 text-zinc-700",
                         inv.status === "ISSUED" && "border-sky-300 bg-sky-50 text-sky-800",
                       ].filter(Boolean).join(" ")}
                     >
-                      {inv.status}
+                      {inv.status === 'PARTIALLY_PAID' ? 'PARTIAL PAID' : inv.status}
                     </span>
                   </td>
                   <td className="px-4 py-3">₹{(inv.grand_total ?? 0).toLocaleString()}</td>

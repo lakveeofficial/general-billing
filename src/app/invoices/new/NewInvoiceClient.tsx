@@ -171,6 +171,7 @@ export default function NewInvoiceClient({
               <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-zinc-800 dark:border-zinc-700">
                 <option value="DRAFT">DRAFT</option>
                 <option value="ISSUED">ISSUED</option>
+                <option value="PARTIALLY_PAID">PARTIAL PAID</option>
                 <option value="PAID">PAID</option>
                 <option value="OVERDUE">OVERDUE</option>
               </select>

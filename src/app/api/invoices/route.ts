@@ -142,11 +142,13 @@ export async function POST(req: NextRequest) {
     const pad: number = bizRows[0]?.invoice_number_padding ?? 4;
     const number = `${prefix}${String(nextNum).padStart(pad, "0")}`;
 
+    const amountPaidOnCreate = (status === 'PAID') ? grandTotal : 0;
+
     const invRes = await client.query(
       `INSERT INTO invoices (
         shop_id, business_id, customer_id, number, issue_date, due_date, status, notes,
         sub_total, discount_total, tax_total, grand_total, amount_paid
-      ) VALUES ($1,$2,$3,$4,COALESCE($5, CURRENT_DATE),$6,$7,$8,$9,$10,$11,$12,0)
+      ) VALUES ($1,$2,$3,$4,COALESCE($5, CURRENT_DATE),$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING *`,
       [
         shop_id,
@@ -161,6 +163,7 @@ export async function POST(req: NextRequest) {
         discountTotal,
         taxTotal,
         grandTotal,
+        amountPaidOnCreate,
       ]
     );
     const invoice = invRes.rows[0];

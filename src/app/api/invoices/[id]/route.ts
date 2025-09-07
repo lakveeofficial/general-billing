@@ -152,19 +152,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     console.log('Current invoice data:', JSON.stringify(current, null, 2));
     
     // Determine what to update
-    const status = body.status || current.status;
-    let amount_paid = current.amount_paid;
-    
-    // If marking as PAID and no amount_paid is provided, set it to grand_total
-    if (status === 'PAID' && (body.amount_paid === undefined || body.amount_paid === null)) {
+    let nextStatus: string | undefined = body.status;
+    let amount_paid: number = current.amount_paid;
+
+    const isEmptyBody = !body || (Object.keys(body).length === 0);
+    if (isEmptyBody) {
+      // Treat empty body as mark-as-paid
+      nextStatus = 'PAID';
       amount_paid = current.grand_total;
-      console.log(`Marking as PAID - setting amount_paid to grand_total: ${amount_paid}`);
-    } else if (body.amount_paid !== undefined) {
-      amount_paid = body.amount_paid;
+      console.log(`Empty body -> Mark as PAID; amount_paid = grand_total: ${amount_paid}`);
+    } else {
+      // Respect explicit amount_paid if provided
+      if (body.amount_paid !== undefined && body.amount_paid !== null) {
+        amount_paid = Number(body.amount_paid);
+      }
+      // If status explicitly provided, use it; otherwise infer from payment amounts
+      if (!nextStatus) {
+        if (amount_paid >= current.grand_total) nextStatus = 'PAID';
+        else if (amount_paid > 0) nextStatus = 'PARTIALLY_PAID';
+        else nextStatus = current.status;
+      }
     }
-    
+
     // Only update if something changed
-    if (status === current.status && amount_paid === current.amount_paid) {
+    if ((nextStatus ?? current.status) === current.status && amount_paid === current.amount_paid) {
       console.log('No changes to apply');
       await client.query('ROLLBACK');
       return NextResponse.json({ data: current });
@@ -178,7 +189,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
            updated_at = NOW() 
        WHERE id = $3 
        RETURNING *`,
-      [status, amount_paid, id]
+      [nextStatus, amount_paid, id]
     );
     
     if (!updated) {

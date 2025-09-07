@@ -1,6 +1,8 @@
 import { query } from "@/lib/db";
 import NewInvoiceClient from "./NewInvoiceClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function NewInvoicePage() {
   // Get default business and its first shop
   const { rows: businesses } = await query<{ id: string }>(
@@ -48,3 +50,4 @@ export default async function NewInvoicePage() {
     </div>
   );
 }
+
