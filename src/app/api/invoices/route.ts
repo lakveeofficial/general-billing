@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool, query } from "@/lib/db";
+import { cookies } from "next/headers";
+import { getSessionUser } from "@/lib/auth";
+import { getUserMemberships, isSuperadmin } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -10,15 +13,29 @@ function badRequest(message: string, issues?: any) {
 // List invoices (basic pagination + optional business/shop filter)
 export async function GET(req: NextRequest) {
   try {
+    const me = await getSessionUser(req);
+    if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 100);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
-    const businessId = searchParams.get("businessId");
-    const shopId = searchParams.get("shopId");
+    let businessId = searchParams.get("businessId") || (await cookies()).get('ctx_biz')?.value || null;
+    let shopId = searchParams.get("shopId") || (await cookies()).get('ctx_shop')?.value || null;
     const search = searchParams.get("search");
 
     const values: any[] = [];
     const where: string[] = [];
+    if (!isSuperadmin(me)) {
+      const memberships = await getUserMemberships(me.id);
+      const allowedBiz = new Set(memberships.map(m => m.business_id));
+      if (businessId && !allowedBiz.has(businessId)) businessId = memberships[0]?.business_id || null;
+      // If a shopId is provided, ensure it belongs to businessId; otherwise drop it
+      if (shopId && businessId) {
+        const { rows: chk } = await query<{ id: string }>(`SELECT id FROM shops WHERE id = $1 AND business_id = $2`, [shopId, businessId]);
+        if (!chk[0]) shopId = null;
+      }
+      // If still no businessId, restrict to allowed IN list later
+    }
+
     if (businessId) {
       values.push(businessId);
       where.push(`i.business_id = $${values.length}`);
@@ -26,6 +43,17 @@ export async function GET(req: NextRequest) {
     if (shopId) {
       values.push(shopId);
       where.push(`i.shop_id = $${values.length}`);
+    }
+    if (!businessId && !isSuperadmin(me)) {
+      const memberships = await getUserMemberships(me.id);
+      const ids = memberships.map(m => m.business_id);
+      if (ids.length) {
+        const idxs = ids.map((_, i) => `$${values.length + i + 1}`).join(',');
+        where.push(`i.business_id IN (${idxs})`);
+        values.push(...ids);
+      } else {
+        return NextResponse.json({ data: [], total: 0 });
+      }
     }
     if (search && search.trim()) {
       const s = `%${search.trim()}%`;

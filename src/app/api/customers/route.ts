@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { cookies } from "next/headers";
+import { getSessionUser } from "@/lib/auth";
+import { getUserMemberships, isSuperadmin } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -9,11 +12,27 @@ function badRequest(message: string, issues?: any) {
 
 export async function GET(req: NextRequest) {
   try {
+    const me = await getSessionUser(req);
+    if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search")?.trim() ?? "";
     const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 100);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
-    const businessId = searchParams.get("businessId");
+    let businessId = searchParams.get("businessId");
+    if (!businessId) businessId = (await cookies()).get('ctx_biz')?.value || null;
+
+    // Enforce scope: SUPERADMIN may keep requested business; ADMIN/STAFF must be within memberships
+    if (!isSuperadmin(me)) {
+      const memberships = await getUserMemberships(me.id);
+      const allowed = new Set(memberships.map(m => m.business_id));
+      if (businessId && !allowed.has(businessId)) {
+        // override to first allowed business
+        businessId = memberships[0]?.business_id || null;
+      }
+      if (!businessId) {
+        // if still none, restrict to all allowed businesses via IN()
+      }
+    }
 
     const values: any[] = [];
     const where: string[] = [];
@@ -21,6 +40,19 @@ export async function GET(req: NextRequest) {
     if (businessId) {
       values.push(businessId);
       where.push(`business_id = $${values.length}`);
+    }
+    // If not businessId and not superadmin, restrict to allowed IN list
+    if (!businessId && !isSuperadmin(me)) {
+      const memberships = await getUserMemberships(me.id);
+      const ids = memberships.map(m => m.business_id);
+      if (ids.length) {
+        const idxs = ids.map((_, i) => `$${values.length + i + 1}`).join(',');
+        where.push(`business_id IN (${idxs})`);
+        values.push(...ids);
+      } else {
+        // No scope -> empty result fast path
+        return NextResponse.json({ data: [], total: 0 });
+      }
     }
     if (search) {
       values.push(`%${search}%`);

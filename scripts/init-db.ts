@@ -72,6 +72,7 @@ async function run() {
     // Enums
     await ensureEnum('tax_type', ['NONE', 'GST', 'VAT']);
     await ensureEnum('invoice_status', ['DRAFT', 'ISSUED', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'VOID']);
+    await ensureEnum('user_role', ['SUPERADMIN', 'ADMIN', 'STAFF']);
 
     // Tables (use gen_random_uuid from pgcrypto)
     await client.query(`
@@ -175,6 +176,52 @@ async function run() {
         paid_at timestamptz NOT NULL DEFAULT now(),
         notes text
       );
+      
+      -- Users and Auth
+      CREATE TABLE IF NOT EXISTS users (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        name text,
+        email text UNIQUE NOT NULL,
+        password_hash text NOT NULL,
+        role user_role NOT NULL DEFAULT 'STAFF',
+        is_active boolean NOT NULL DEFAULT true,
+        must_reset_password boolean NOT NULL DEFAULT false,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token text UNIQUE NOT NULL,
+        expires_at timestamptz NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+      
+      CREATE TABLE IF NOT EXISTS memberships (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+        shop_id uuid REFERENCES shops(id) ON DELETE CASCADE,
+        role user_role NOT NULL,
+        can_delete_invoices boolean NOT NULL DEFAULT false,
+        can_delete_products boolean NOT NULL DEFAULT false,
+        can_manage_products boolean NOT NULL DEFAULT true,
+        can_view_reports boolean NOT NULL DEFAULT true,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      -- Audit logs for key actions
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        actor_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        action text NOT NULL,
+        target_type text,
+        target_id text,
+        metadata jsonb,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
     `);
 
     // Helper checks for index/column existence to avoid errors in partially-created schemas
@@ -211,6 +258,27 @@ async function run() {
     }
     if ((await columnExists('payments', 'invoice_id')) && !(await indexExists('idx_payments_invoice'))) {
       await client.query(`CREATE INDEX idx_payments_invoice ON payments(invoice_id);`);
+    }
+    if (!(await indexExists('idx_users_email_unique'))) {
+      try { await client.query(`CREATE UNIQUE INDEX idx_users_email_unique ON users(email);`); } catch {}
+    }
+    if (!(await indexExists('idx_user_sessions_token_unique'))) {
+      try { await client.query(`CREATE UNIQUE INDEX idx_user_sessions_token_unique ON user_sessions(token);`); } catch {}
+    }
+    if (!(await indexExists('idx_memberships_user'))) {
+      try { await client.query(`CREATE INDEX idx_memberships_user ON memberships(user_id);`); } catch {}
+    }
+    if (!(await indexExists('idx_memberships_business'))) {
+      try { await client.query(`CREATE INDEX idx_memberships_business ON memberships(business_id);`); } catch {}
+    }
+    if (!(await indexExists('idx_memberships_shop'))) {
+      try { await client.query(`CREATE INDEX idx_memberships_shop ON memberships(shop_id);`); } catch {}
+    }
+    if (!(await indexExists('idx_audit_logs_actor'))) {
+      try { await client.query(`CREATE INDEX idx_audit_logs_actor ON audit_logs(actor_user_id);`); } catch {}
+    }
+    if (!(await indexExists('idx_audit_logs_action'))) {
+      try { await client.query(`CREATE INDEX idx_audit_logs_action ON audit_logs(action);`); } catch {}
     }
 
     // Settings columns on businesses (guarded)

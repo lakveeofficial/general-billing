@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
+import { getUserMemberships, isSuperadmin } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,18 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const me = await getSessionUser(req);
+    if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { id } = await params;
+    // Fetch product to get business scope
+    const prodRes = await query<{ business_id: string }>(`SELECT business_id FROM products WHERE id = $1`, [id]);
+    const prod = prodRes.rows[0];
+    if (!prod) return notFound();
+    if (!isSuperadmin(me)) {
+      const memberships = await getUserMemberships(me.id);
+      const allowed = memberships.some(m => m.business_id === prod.business_id && (m.can_manage_products ?? true));
+      if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const body = await req.json();
     const {
       sku,
@@ -87,7 +100,18 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const me = await getSessionUser(_req);
+    if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { id } = await params;
+    // Fetch product to get business scope
+    const prodRes = await query<{ business_id: string }>(`SELECT business_id FROM products WHERE id = $1`, [id]);
+    const prod = prodRes.rows[0];
+    if (!prod) return notFound();
+    if (!isSuperadmin(me)) {
+      const memberships = await getUserMemberships(me.id);
+      const allowed = memberships.some(m => m.business_id === prod.business_id && (m.can_delete_products === true));
+      if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const { rows } = await query(`DELETE FROM products WHERE id = $1 RETURNING id`, [id]);
     if (!rows[0]) return notFound();
     return NextResponse.json({ success: true });

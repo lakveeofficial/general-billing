@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool, query } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
+import { getUserMemberships, isSuperadmin } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -243,6 +245,18 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const client = await pool.connect();
   try {
     const { id } = await params;
+    const me = await getSessionUser(_req);
+    if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    // Load invoice scope (business_id)
+    const { rows: invScope } = await query<{ business_id: string }>(`SELECT business_id FROM invoices WHERE id = $1`, [id]);
+    const scope = invScope[0];
+    if (!scope) return notFound();
+    if (!isSuperadmin(me)) {
+      const memberships = await getUserMemberships(me.id);
+      const allowed = memberships.some(m => m.business_id === scope.business_id && (m.can_delete_invoices === true));
+      if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     await client.query("BEGIN");
     await client.query(`DELETE FROM invoice_items WHERE invoice_id = $1`, [id]);
     const del = await client.query(`DELETE FROM invoices WHERE id = $1 RETURNING id`, [id]);

@@ -7,12 +7,13 @@ import { FaInstagram, FaYoutube, FaGlobe } from "react-icons/fa";
 import { cn } from "@/lib/cn";
 import Link from "next/link";
 
-const nav = [
+const baseNav = [
   { href: "/dashboard", label: "Dashboard", icon: FiHome },
   { href: "/products", label: "Products", icon: FiBox },
   { href: "/customers", label: "Customers", icon: FiUsers },
   { href: "/invoices", label: "Invoices", icon: FiFileText },
   { href: "/settings", label: "Settings", icon: FiSettings },
+  { href: "/settings/users", label: "Users", icon: FiUsers },
 ];
 
 function SearchBar({ onSearchToggle }: { onSearchToggle: () => void }) {
@@ -69,6 +70,54 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
 
+  // Role and memberships for role-based nav
+  const [me, setMe] = useState<{ user: { role?: string } | null; memberships: any[] }>({ user: null, memberships: [] });
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        const j = await res.json().catch(() => ({}));
+        setMe({ user: j?.user || null, memberships: j?.memberships || [] });
+      } catch {
+        setMe({ user: null, memberships: [] });
+      }
+    })();
+  }, []);
+  const role: string | undefined = me.user?.role as any;
+  const isSuper = role === 'SUPERADMIN';
+  const isStaff = role === 'STAFF';
+  type NavItem = { href: string; label: string; icon: any };
+  const nav: NavItem[] = useMemo(() => {
+    let items = [...baseNav] as NavItem[];
+    if (isStaff) items = items.filter(i => i.href !== '/settings' && i.href !== '/settings/users');
+    if (isSuper) items = [{ href: '/superadmin', label: 'Superadmin', icon: FiSettings }, ...items];
+    return items;
+  }, [isSuper, isStaff]);
+
+  // Context selector state
+  const [ctx, setCtx] = useState<{ businesses: { id: string; name: string }[]; shopsByBiz: Record<string, { id: string; name: string }[]> }>({ businesses: [], shopsByBiz: {} });
+  const [ctxBiz, setCtxBiz] = useState<string>("");
+  const [ctxShop, setCtxShop] = useState<string>("");
+  useEffect(() => {
+    (async () => {
+      if (!(isSuper || !isStaff)) return; // only admin/superadmin
+      try {
+        const res = await fetch('/api/context/options', { cache: 'no-store' });
+        const j = await res.json().catch(() => ({}));
+        if (res.ok) setCtx({ businesses: j?.data?.businesses || [], shopsByBiz: j?.data?.shopsByBiz || {} });
+      } catch {}
+    })();
+  }, [isSuper, isStaff]);
+  async function applyContext(nextBiz: string, nextShop: string) {
+    try {
+      await fetch('/api/context/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: nextBiz, shop_id: nextShop || null }) });
+      setCtxBiz(nextBiz);
+      setCtxShop(nextShop || "");
+      // reload to let server components pick cookies
+      window.location.reload();
+    } catch {}
+  }
+
   // Keep header search in sync with ?search= when on /products
   useEffect(() => {
     const isProducts = pathname?.startsWith("/products");
@@ -87,6 +136,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     },
     [searchValue, router]
   );
+  const isAuthPage = pathname?.startsWith('/login') || pathname?.startsWith('/reset-password/force');
+  if (isAuthPage) {
+    return (
+      <div className="min-h-dvh flex flex-col bg-gradient-to-br from-indigo-50 via-white to-pink-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950 text-zinc-900 dark:text-zinc-100">
+        <main className="flex-1 flex items-center justify-center p-4 lg:p-8">
+          {children}
+        </main>
+        <footer className="px-4 py-3 text-sm text-zinc-200 border-t border-indigo-900/30 bg-zinc-950/80">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>© LakVee Softwares Pvt. Ltd.</div>
+            <div className="flex items-center gap-4">
+              <a href="https://lakveesoftwares.co.in" target="_blank" rel="noreferrer" aria-label="Website" title="Website"
+                 className="inline-flex items-center gap-1.5 text-zinc-400 hover:text-indigo-300 transition-colors">
+                <svg viewBox="0 0 24 24" className="text-lg h-4 w-4" fill="currentColor"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zm0 2c1.93 0 3.68.78 4.95 2.05A6.97 6.97 0 0119 12c0 1.93-.78 3.68-2.05 4.95A6.97 6.97 0 0112 19a6.97 6.97 0 01-4.95-2.05A6.97 6.97 0 015 12c0-1.93.78-3.68 2.05-4.95A6.97 6.97 0 0112 5z"/></svg>
+                <span className="hidden sm:inline">lakveesoftwares.co.in</span>
+              </a>
+              <a href="https://instagram.com/lakveesoftwares" target="_blank" rel="noreferrer" aria-label="Instagram" title="Instagram"
+                 className="inline-flex items-center gap-1.5 text-zinc-400 hover:text-pink-400 transition-colors">
+                <svg viewBox="0 0 24 24" className="text-lg h-4 w-4" fill="currentColor"><path d="M7 2C4.243 2 2 4.243 2 7v10c0 2.757 2.243 5 5 5h10c2.757 0 5-2.243 5-5V7c0-2.757-2.243-5-5-5H7zm13 5a1 1 0 110-2 1 1 0 010 2zM12 8a4 4 0 110 8 4 4 0 010-8z"/></svg>
+                <span className="hidden sm:inline">@lakveesoftwares</span>
+              </a>
+              <a href="https://youtube.com/@lakveesoftwares" target="_blank" rel="noreferrer" aria-label="YouTube" title="YouTube"
+                 className="inline-flex items-center gap-1.5 text-zinc-400 hover:text-red-500 transition-colors">
+                <svg viewBox="0 0 24 24" className="text-lg h-4 w-4" fill="currentColor"><path d="M23.5 6.2s-.2-1.6-.8-2.3c-.8-.8-1.7-.8-2.1-.9C17.6 2.6 12 2.6 12 2.6h0s-5.6 0-8.6.4c-.4 0-1.3.1-2.1.9C.7 4.6.5 6.2.5 6.2S0 8.1 0 10v1.9c0 1.9.5 3.8.5 3.8s.2 1.6.8 2.3c.8.8 1.8.8 2.2.9 1.6.2 6.5.4 8.5.4h0c0 0 5.6 0 8.6-.4.4 0 1.3-.1 2.1-.9.6-.7.8-2.3.8-2.3S24 13.9 24 12V10c0-1.9-.5-3.8-.5-3.8zM9.6 14.8V7.9l6.2 3.4-6.2 3.5z"/></svg>
+                <span className="hidden sm:inline">@lakveesoftwares</span>
+              </a>
+            </div>
+            <div className="text-zinc-400">v0.1 • Next.js 15 • React 19 RC</div>
+          </div>
+        </footer>
+      </div>
+    );
+  }
   return (
     <div className="min-h-dvh flex flex-col bg-gradient-to-br from-indigo-50 via-white to-pink-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950 text-zinc-900 dark:text-zinc-100">
       <header className="sticky top-0 z-10 border-b border-indigo-900/30 bg-zinc-950/80 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md shadow-sm">
@@ -141,10 +223,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </Suspense>
             <div className="hidden md:flex items-center gap-2">
               <div className="h-6 w-0.5 bg-indigo-600/50"></div>
-              <div className="text-sm font-medium bg-gradient-to-r from-indigo-400 to-fuchsia-400 bg-clip-text text-transparent">
-                LakVee Billing System
-              </div>
+              <div className="text-xs sm:text-sm text-zinc-300">{role ? `Role: ${role}` : 'Not signed in'}</div>
             </div>
+            <button
+              onClick={async () => { try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {} finally { window.location.href = '/login'; } }}
+              className="inline-flex items-center gap-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white/70 dark:bg-zinc-800/70 px-3 py-2 text-sm shadow hover:bg-white"
+            >
+              Logout
+            </button>
           </div>
         </div>
         {/* Mobile nav & search */}
@@ -179,6 +265,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   </Link>
                 );
               })}
+              <button
+                onClick={async () => { try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {} finally { window.location.href = '/login'; } }}
+                className="mt-2 flex items-center gap-2 px-3.5 py-3 rounded-md text-base hover:bg-indigo-100/70 dark:hover:bg-indigo-900/40"
+              >
+                Logout
+              </button>
             </nav>
           </div>
         )}
